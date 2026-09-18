@@ -1,0 +1,7 @@
+{
+  "name": "GridCharge",
+  "description": "Smart EV Fleet Charging & Peak-Demand Management Platform for commercial depots",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
