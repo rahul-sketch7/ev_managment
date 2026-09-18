@@ -63,7 +63,7 @@ export const Settings: React.FC = () => {
 
   // Technical & Diagnostics (collapsed by default)
   const [showTechnicalSection, setShowTechnicalSection] = useState<boolean>(false);
-  const [urlInput, setUrlInput] = useState<string>(apiBaseUrl || 'http://localhost:8081');
+  const [urlInput, setUrlInput] = useState<string>(apiBaseUrl);
   const [operatorRole, setOperatorRole] = useState<'operator' | 'manager' | 'admin'>('operator');
   const [shiftNotes, setShiftNotes] = useState<string>(
     'Shift Handover (18:00 - 06:00 Night Shift):\n- Bay 14 maintenance inspection confirmed clear.\n- Priority routes EV-1002 and EV-1005 scheduled for early morning dispatch (05:45 Departure).\n- Peak tariff window (17:00-21:00) observed under 500 kW ceiling.'
@@ -1012,7 +1012,7 @@ export const Settings: React.FC = () => {
                   value={urlInput}
                   onChange={(e) => setUrlInput(e.target.value)}
                   className="w-full h-8 px-2.5 rounded bg-[#eff4ff] font-mono text-[#00163d] border border-[#c4c6d0] text-[11px]"
-                  placeholder="http://localhost:8081"
+                  placeholder="Configured API base URL"
                 />
                 <span className="text-[10px] text-[#747780] mt-0.5 block">
                   Connected route: <code>POST /api/v1/OptimizeChargingProfiles</code>

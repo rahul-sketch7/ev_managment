@@ -115,19 +115,19 @@ export interface HourlyDemandProfile {
 export interface OptimizationResultData {
   id: string;
   timestamp: string;
-  solvedInSeconds: number;
-  optimizedPeakDemand: number; // 428 kW
-  uncontrolledPeakDemand: number; // 522 kW
-  peakReductionKw: number; // 94 kW
-  peakReductionPercent: number; // 18%
-  energyCost: number; // ₹8,420
-  uncontrolledCost: number; // ₹9,870
-  costSavings: number; // ₹1,450
-  costSavingsPercent: number; // 14.7%
-  vehiclesReady: number; // 24
-  totalVehicles: number; // 27
-  gridHeadroom: number; // 172 kW
-  siteCapacity: number; // 600 kW
+  solvedInSeconds: number | null;
+  optimizedPeakDemand: number;
+  uncontrolledPeakDemand: number;
+  peakReductionKw: number;
+  peakReductionPercent: number;
+  energyCost: number | null;
+  uncontrolledCost: number | null;
+  costSavings: number | null;
+  costSavingsPercent: number | null;
+  vehiclesReady: number;
+  totalVehicles: number;
+  gridHeadroom: number;
+  siteCapacity: number;
   shifts: ScheduleAdjustment[];
   readiness: VehicleReadiness[];
   constraintChecks: {
@@ -136,8 +136,16 @@ export interface OptimizationResultData {
     passed: boolean;
   }[];
   explanationPoints: string[];
-  backendSource: 'live' | 'deterministic-fallback';
+  backendSource: 'live';
   hourlyDemandCurve?: HourlyDemandProfile[];
+  vehicleSchedules: Array<{
+    vehicleId: string;
+    chargerId: string | null;
+    startTime: string;
+    endTime: string;
+    powerKw: number;
+    energyKwh: number;
+  }>;
 }
 
 export interface SimulationParameters {
@@ -204,6 +212,7 @@ export type PageView =
   | 'add-vehicle'
   | 'add-charger'
   | 'playground'
-  | 'data-inspector';
+  | 'data-inspector'
+  | 'pdf-schedule-import';
 
 export type LanguageCode = 'en' | 'hi' | 'de' | 'es' | 'fr';

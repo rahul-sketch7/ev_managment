@@ -63,32 +63,9 @@ export const SAPPlayground: React.FC = () => {
       setResponsePayload(JSON.stringify(data, null, 2));
       showToast('Optimizer response received.');
     } catch (err: any) {
-      setResponseStatus('FALLBACK (Local Deterministic Result)');
-      // Return realistic deterministic response for the playground
-      const fallbackData = {
-        id: `OPT-SAP-${Date.now().toString().slice(-6)}`,
-        status: 'FEASIBLE',
-        backendSource: 'deterministic-fallback',
-        solvedInSeconds: 1.42,
-        optimizedPeakDemand: 428,
-        uncontrolledPeakDemand: 522,
-        peakReductionKw: 94,
-        peakReductionPercent: 18.0,
-        energyCost: 8420,
-        uncontrolledCost: 9870,
-        costSavings: 1450,
-        vehiclesReady: 24,
-        totalVehicles: 27,
-        gridHeadroom: 172,
-        siteCapacity: 600,
-        profilesGenerated: 24,
-        message:
-          'Optimizer execution completed via deterministic fallback harness (Spring Boot server offline or unmapped at ' +
-          apiBaseUrl +
-          ')',
-      };
-      setResponsePayload(JSON.stringify(fallbackData, null, 2));
-      showToast('Payload processed via deterministic test harness.');
+      setResponseStatus('REQUEST FAILED');
+      setResponsePayload(JSON.stringify({ error: 'Optimization engine unavailable.', detail: err?.message || 'Request failed.' }, null, 2));
+      showToast('Optimization engine unavailable.');
     } finally {
       setLoading(false);
     }

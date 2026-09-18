@@ -2,7 +2,11 @@ import React from 'react';
 import { useGridCharge } from '../context/GridChargeContext';
 
 export const OptimizationResult: React.FC = () => {
-  const { optimizationResult, applySchedule, setCurrentView } = useGridCharge();
+  const { optimizationResult, optimizationStatus, optimizationError, applySchedule, setCurrentView } = useGridCharge();
+
+  if (!optimizationResult) {
+    return <div className="bg-white border border-[#c4c6d0]/50 rounded-xl p-6 shadow-xs"><h1 className="text-[20px] font-bold text-[#00163d]">Optimization Results</h1><p className="text-[13px] text-[#44464f] mt-2">No optimization result is available. Status: <strong>{optimizationStatus}</strong>.</p>{optimizationError && <p className="text-[12px] text-[#ba1a1a] mt-2">{optimizationError}</p>}<button onClick={() => setCurrentView('dashboard')} className="mt-4 px-3 py-2 bg-[#00163d] text-white text-[12px] font-semibold rounded">Dashboard</button></div>;
+  }
 
   return (
     <div className="flex flex-col w-full gap-4">
@@ -49,7 +53,7 @@ export const OptimizationResult: React.FC = () => {
           </div>
           <div className="h-3 w-px bg-slate-300"></div>
           <div>
-            Solved in: <span className="font-bold text-[#006c4a]">{optimizationResult.solvedInSeconds}s</span>
+            Solved in: <span className="font-bold text-[#006c4a]">{optimizationResult.solvedInSeconds === null ? 'Not provided' : `${optimizationResult.solvedInSeconds}s`}</span>
           </div>
           <div className="h-3 w-px bg-slate-300"></div>
           <div>
@@ -105,14 +109,14 @@ export const OptimizationResult: React.FC = () => {
           </div>
           <div className="flex items-baseline gap-2 mt-2">
             <span className="text-[26px] font-bold text-[#006c4a]">
-              ₹{optimizationResult.energyCost.toLocaleString()}
+              {optimizationResult.energyCost === null ? 'Not provided' : `₹${optimizationResult.energyCost.toLocaleString()}`}
             </span>
             <span className="text-[11px] px-1.5 py-0.5 rounded bg-[#82f5c1]/40 text-[#00714e] font-semibold">
-              -₹{optimizationResult.costSavings.toLocaleString()} ({optimizationResult.costSavingsPercent}%)
+              {optimizationResult.costSavings === null ? 'Savings not provided' : `-₹${optimizationResult.costSavings.toLocaleString()} (${optimizationResult.costSavingsPercent}%)`}
             </span>
           </div>
           <div className="text-[12px] text-[#747780] mt-1 truncate">
-            Uncontrolled baseline: ₹{optimizationResult.uncontrolledCost.toLocaleString()}
+            Uncontrolled baseline: {optimizationResult.uncontrolledCost === null ? 'Not provided' : `₹${optimizationResult.uncontrolledCost.toLocaleString()}`}
           </div>
         </div>
 

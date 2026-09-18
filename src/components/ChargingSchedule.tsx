@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useGridCharge } from '../context/GridChargeContext';
+import { downloadTextFile, printReport, toCsv } from '../services/exportService';
 
 type ViewMode = 'vehicle' | 'bay';
 type TimeResolution = '15m' | '30m' | '1h';
@@ -10,6 +11,9 @@ export const ChargingSchedule: React.FC = () => {
     chargers,
     gridConfig,
     optimizationResult,
+    optimizationStatus,
+    optimizationError,
+    baselineResult,
     runOptimization,
     applySchedule,
     isOptimizing,
@@ -24,7 +28,11 @@ export const ChargingSchedule: React.FC = () => {
   const [showUncontrolled, setShowUncontrolled] = useState<boolean>(true);
   const [showCostOverlay, setShowCostOverlay] = useState<boolean>(true);
   const [hoveredVehicle, setHoveredVehicle] = useState<any | null>(null);
-  const [zoomLevel, setZoomLevel] = useState<number>(100); // %
+  const [zoomLevel, setZoomLevel] = useState<number>(100);
+
+  if (!optimizationResult) {
+    return <div className="bg-white border border-[#c4c6d0]/50 rounded-xl p-6 shadow-xs"><h1 className="text-[20px] font-bold text-[#00163d]">Charging Schedule</h1>{baselineResult ? <><p className="text-[13px] text-[#44464f] mt-2"><strong>Baseline Schedule</strong> — uncontrolled, earliest-possible charging before optimization.</p><div className="mt-3 grid grid-cols-3 gap-3 text-[12px]"><span>Peak: <strong>{baselineResult.peakDemand} kW</strong></span><span>Energy: <strong>{baselineResult.energyConsumption} kWh</strong></span><span>Ready: <strong>{baselineResult.vehiclesReady}/{baselineResult.totalVehicles}</strong></span></div></> : <p className="text-[13px] text-[#44464f] mt-2">No approved vehicle schedule is available. Import and approve a PDF schedule first.</p>}{optimizationError && <p className="text-[12px] text-[#ba1a1a] mt-2">{optimizationError}</p>}<button onClick={() => runOptimization(true)} disabled={isOptimizing || !baselineResult} className="mt-4 px-4 py-2 bg-[#00163d] text-white text-[12px] font-semibold rounded-lg">{isOptimizing ? 'Solving...' : 'Run Smart Optimization'}</button></div>;
+  }
 
   const filteredVehicles = vehicles.filter((v) => {
     if (filterPriority === 'Critical') return v.routePriority === 'CRITICAL';
@@ -47,8 +55,15 @@ export const ChargingSchedule: React.FC = () => {
     return (totalMinutes / 1440) * 100;
   };
 
-  // Coincident 24h load curve data (24 sample points 00:00 - 23:00)
-  const loadProfilePoints = [
+  const loadProfilePoints = optimizationResult.hourlyDemandCurve?.map((point) => ({
+    hour: point.hour,
+    time: point.timeLabel,
+    optKw: point.optimizedKw,
+    unctrlKw: point.uncontrolledKw,
+    costInr: 0,
+    tariff: point.isPeakTariff ? 'Peak' : point.hour < 6 || point.hour >= 22 ? 'Off-Peak' : 'Normal',
+  })) || [];
+  /* const loadProfilePoints = [
     { hour: 0, time: '00:00', optKw: 380, unctrlKw: 110, costInr: 1596, tariff: 'Off-Peak' },
     { hour: 1, time: '01:00', optKw: 420, unctrlKw: 90, costInr: 3360, tariff: 'Off-Peak' },
     { hour: 2, time: '02:00', optKw: 460, unctrlKw: 75, costInr: 5292, tariff: 'Off-Peak' },
@@ -73,27 +88,17 @@ export const ChargingSchedule: React.FC = () => {
     { hour: 21, time: '21:00', optKw: 190, unctrlKw: 420, costInr: 31869, tariff: 'Peak' },
     { hour: 22, time: '22:00', optKw: 280, unctrlKw: 290, costInr: 33045, tariff: 'Peak' },
     { hour: 23, time: '23:00', optKw: 340, unctrlKw: 180, costInr: 34473, tariff: 'Off-Peak' },
-  ];
+  ]; */
 
   // Helper to determine charging segment block positioning and color
   const getVehicleScheduleGeometry = (v: typeof vehicles[0]) => {
     const arrPercent = timeToPercent(v.arrivalTime || '18:00');
     const depPercent = timeToPercent(v.departureTime || '06:00');
 
-    let startPercent = arrPercent;
-    let powerKw = v.maxChargingPower || 22;
-
-    if (v.routePriority === 'CRITICAL') {
-      startPercent = arrPercent; // charges immediately
-      powerKw = 44;
-    } else if (v.id === 'EV-1048' || v.id === 'EV-1056' || v.routePriority === 'NORMAL') {
-      // Shifted outside peak (starts at 23:15 off-peak)
-      startPercent = timeToPercent('23:15');
-    } else {
-      startPercent = arrPercent + 2; // Staggered
-    }
-
-    const durationHours = Math.max(1.2, v.requiredEnergy / powerKw);
+    const plan = optimizationResult.vehicleSchedules.find((schedule) => schedule.vehicleId === v.id);
+    const startPercent = plan ? timeToPercent(plan.startTime) : arrPercent;
+    const powerKw = plan?.powerKw || 0;
+    const durationHours = plan && powerKw > 0 ? plan.energyKwh / powerKw : 0;
     const durationPercent = (durationHours / 24) * 100;
 
     // Color based on tariff period of startPercent
@@ -119,12 +124,18 @@ export const ChargingSchedule: React.FC = () => {
       powerKw,
       barColor,
       tariffTag,
-      energyAddedKwh: v.requiredEnergy,
+      energyAddedKwh: plan?.energyKwh || 0,
     };
   };
 
   const handleExport = (format: 'csv' | 'json') => {
-    showToast(`Exported 24-hour charging schedule as ${format.toUpperCase()} for OCPP CSMS push.`);
+    const schedules = optimizationResult?.vehicleSchedules || baselineResult?.schedules || [];
+    if (format === 'json') {
+      downloadTextFile('gridcharge-charging-schedule.json', JSON.stringify({ source: optimizationResult ? 'OPTIMIZED' : 'BASELINE', schedules }, null, 2), 'application/json');
+    } else {
+      downloadTextFile('gridcharge-charging-schedule.csv', toCsv(schedules), 'text/csv;charset=utf-8');
+    }
+    showToast(`Exported ${format.toUpperCase()} charging schedule.`);
   };
 
   return (
@@ -156,7 +167,7 @@ export const ChargingSchedule: React.FC = () => {
             <span>Export CSV</span>
           </button>
           <button
-            onClick={() => showToast('Compiling high-resolution Gantt schedule PDF...')}
+            onClick={() => { printReport('GridCharge Charging Schedule', document.querySelector('main')?.innerText); showToast('Charging schedule report downloaded. Open the HTML file and print it to PDF if needed.'); }}
             className="inline-flex items-center gap-1.5 px-3 h-8.5 rounded-md bg-white text-[#00163d] text-[12px] font-medium hover:bg-[#eff4ff] shadow-2xs transition-colors border border-[#c4c6d0] cursor-pointer"
             type="button"
           >

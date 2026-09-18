@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { useGridCharge } from '../context/GridChargeContext';
+import { downloadTextFile, toCsv } from '../services/exportService';
 
 export const EnergyAndGrid: React.FC = () => {
-  const { gridConfig, updateGridConfig, showToast, setCurrentView } = useGridCharge();
+  const { gridConfig, optimizationResult, baselineResult, updateGridConfig, showToast, setCurrentView } = useGridCharge();
 
   const [transformerCapacity, setTransformerCapacity] = useState<number>(600);
   const [contractedLimit, setContractedLimit] = useState<number>(500);
@@ -25,10 +26,10 @@ export const EnergyAndGrid: React.FC = () => {
   } | null>(null);
 
   // Current real-time operational stats
-  const currentLoad = 428; // kW
-  const loadPctOfContract = Math.round((currentLoad / contractedLimit) * 100);
-  const loadPctOfTransformer = Math.round((currentLoad / transformerCapacity) * 100);
-  const headroomKw = Math.max(0, contractedLimit - currentLoad);
+  const currentLoad = optimizationResult?.optimizedPeakDemand ?? null;
+  const loadPctOfContract = currentLoad === null ? null : Math.round((currentLoad / contractedLimit) * 100);
+  const loadPctOfTransformer = currentLoad === null ? null : Math.round((currentLoad / transformerCapacity) * 100);
+  const headroomKw = currentLoad === null ? null : Math.max(0, contractedLimit - currentLoad);
 
   const handleSaveConfig = () => {
     updateGridConfig({
@@ -44,18 +45,8 @@ export const EnergyAndGrid: React.FC = () => {
   };
 
   const handleRunSimulation = () => {
-    setIsSimulatingTariff(true);
-    setTimeout(() => {
-      setIsSimulatingTariff(false);
-      setSimulationResult({
-        unoptimizedCost: 28450,
-        optimizedCost: 19680,
-        savingsInr: 8770,
-        savingsPct: 30.8,
-        peakShavedKw: 142,
-      });
-      showToast('Tariff impact simulation finished: ₹8,770 daily energy arbitrage demonstrated.');
-    }, 600);
+    setSimulationResult(null);
+    showToast('Run Smart Optimization to compare real baseline and optimized tariff results.');
   };
 
   // 24-hour tariff slots
@@ -78,7 +69,17 @@ export const EnergyAndGrid: React.FC = () => {
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <button
-            onClick={() => showToast('Tariff structure and 15-minute load curves exported.')}
+            onClick={() => {
+              const curve = optimizationResult?.hourlyDemandCurve || baselineResult?.hourlyDemandCurve;
+              const rows = curve
+                ? curve.map((point) => ({ time: point.timeLabel, tariff: point.tariffRate, baselineKw: point.uncontrolledKw, optimizedKw: point.optimizedKw }))
+                : Array.from({ length: 24 }, (_, hour) => {
+                  const tariff = hour >= 17 && hour < 23 ? peakRate : (hour < 6 || hour >= 23 ? offPeakRate : normalRate);
+                  return { time: `${String(hour).padStart(2, '0')}:00`, tariff, baselineKw: null, optimizedKw: null };
+                });
+              downloadTextFile('gridcharge-tariff-sheet.csv', toCsv(rows, ['time', 'tariff', 'baselineKw', 'optimizedKw']), 'text/csv;charset=utf-8');
+              showToast('Tariff structure and load curves exported.');
+            }}
             className="inline-flex items-center gap-1.5 px-3 h-8.5 rounded-md bg-white text-[#00163d] text-[12px] font-medium hover:bg-[#eff4ff] shadow-2xs transition-colors border border-[#c4c6d0] cursor-pointer"
             type="button"
           >
@@ -127,11 +128,11 @@ export const EnergyAndGrid: React.FC = () => {
           <div className="flex items-baseline gap-2 mt-2">
             <span className="text-[26px] font-mono font-bold text-[#00163d]">{contractedLimit}</span>
             <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-900 font-bold">
-              {loadPctOfContract}% Utilized
+              {loadPctOfContract === null ? 'Not provided' : `${loadPctOfContract}% Utilized`}
             </span>
           </div>
           <div className="text-[11px] text-[#006c4a] font-bold mt-1 truncate">
-            {headroomKw} kW safe buffer available
+            {headroomKw === null ? 'Not provided by optimization engine' : `${headroomKw} kW safe buffer available`}
           </div>
         </div>
 
@@ -144,7 +145,7 @@ export const EnergyAndGrid: React.FC = () => {
             <span className="material-symbols-outlined text-[18px] text-[#006c4a]">trending_down</span>
           </div>
           <div className="flex items-baseline gap-2 mt-2">
-            <span className="text-[26px] font-mono font-bold text-[#006c4a]">142</span>
+            <span className="text-[26px] font-mono font-bold text-[#006c4a]">{optimizationResult ? `${optimizationResult.peakReductionKw}` : 'Not provided'}</span>
             <span className="text-[12px] text-[#44464f]">kW Avoided</span>
           </div>
           <div className="text-[11px] text-[#44464f] mt-1 truncate">Via smart overnight charge shifting</div>
@@ -159,7 +160,7 @@ export const EnergyAndGrid: React.FC = () => {
             <span className="material-symbols-outlined text-[18px] text-[#006c4a]">savings</span>
           </div>
           <div className="flex items-baseline gap-2 mt-2">
-            <span className="text-[26px] font-mono font-bold text-[#006c4a]">₹56,800</span>
+            <span className="text-[26px] font-mono font-bold text-[#006c4a]">{optimizationResult?.costSavings === null || optimizationResult?.costSavings === undefined ? 'Not provided' : `₹${optimizationResult.costSavings.toLocaleString('en-IN')}`}</span>
             <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#85f8c4]/30 text-[#005137] font-bold">
               This Cycle
             </span>
@@ -226,7 +227,7 @@ export const EnergyAndGrid: React.FC = () => {
               <div className="flex items-center justify-between text-[12px]">
                 <div className="flex items-center gap-2">
                   <span className="font-semibold text-[#00163d]">Real-Time Depot Coincident Load:</span>
-                  <span className="font-mono text-[16px] font-bold text-[#00163d]">{currentLoad} kW</span>
+                  <span className="font-mono text-[16px] font-bold text-[#00163d]">{currentLoad === null ? 'Not provided' : `${currentLoad} kW`}</span>
                 </div>
                 <div className="flex items-center gap-4 text-[11px] font-mono">
                   <span className="text-[#00163d]">Contracted Limit: <strong>{contractedLimit} kW</strong></span>
@@ -239,9 +240,9 @@ export const EnergyAndGrid: React.FC = () => {
                 {/* Active load bar */}
                 <div
                   className="h-full rounded-md bg-[#00163d] transition-all flex items-center justify-end pr-2 text-white font-mono text-[10px] font-bold"
-                  style={{ width: `${(currentLoad / transformerCapacity) * 100}%` }}
+                  style={{ width: `${currentLoad === null ? 0 : (currentLoad / transformerCapacity) * 100}%` }}
                 >
-                  {currentLoad} kW ({loadPctOfTransformer}%)
+                  {currentLoad === null ? 'Not provided by optimization engine' : `${currentLoad} kW (${loadPctOfTransformer}%)`}
                 </div>
 
                 {/* Contracted limit marker line */}
@@ -272,12 +273,12 @@ export const EnergyAndGrid: React.FC = () => {
               </div>
               <div className="p-3 rounded-lg bg-[#eff4ff] border border-blue-100 flex flex-col">
                 <span className="text-[10px] font-bold uppercase text-[#44464f]">EV Active Charging</span>
-                <span className="font-mono text-[18px] font-bold text-[#00163d] mt-0.5">{currentLoad - 80} kW</span>
+                <span className="font-mono text-[18px] font-bold text-[#00163d] mt-0.5">{baselineResult?.peakDemand ?? 'Not provided'} kW</span>
                 <span className="text-[11px] text-[#44464f] mt-0.5">8 connected delivery vans</span>
               </div>
               <div className="p-3 rounded-lg bg-[#eff4ff] border border-blue-100 flex flex-col">
                 <span className="text-[10px] font-bold uppercase text-[#006c4a]">Peak Shaved Real-Time</span>
-                <span className="font-mono text-[18px] font-bold text-[#006c4a] mt-0.5">142 kW</span>
+                <span className="font-mono text-[18px] font-bold text-[#006c4a] mt-0.5">{optimizationResult ? `${optimizationResult.peakReductionKw} kW` : 'Not provided'}</span>
                 <span className="text-[11px] text-[#006c4a] font-bold mt-0.5">Displaced to 23:00 off-peak</span>
               </div>
             </div>

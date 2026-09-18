@@ -1102,7 +1102,8 @@ export const initialGridConfig: GridConfiguration = {
   },
 };
 
-export const initialOptimizationResult: OptimizationResultData = {
+/* Removed from runtime state: historic precomputed optimization fixture.
+const initialOptimizationResult: OptimizationResultData = {
   id: 'OPT-20260918-04',
   timestamp: '18 Sep 2026, 17:42:04 UTC',
   solvedInSeconds: 1.42,
@@ -1288,8 +1289,9 @@ export const initialOptimizationResult: OptimizationResultData = {
     'EV-1033 locked immediate 44 kW DC boost charging at arrival due to low SOC (28%) and Critical route SLA.',
     'Total site demand was capped at 428 kW, maintaining 172 kW of safety buffer below the 600 kW contract ceiling.',
   ],
-};
+}; */
 
+// Historical output is intentionally not loaded into application state.
 export const initialHistoricalDays: HistoricalDayRecord[] = [
   {
     date: '18 Sep',

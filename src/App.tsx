@@ -20,6 +20,7 @@ import { AddVehicleModal } from './components/AddVehicleModal';
 import { AddChargerModal } from './components/AddChargerModal';
 import { SAPPlayground } from './components/SAPPlayground';
 import { DataInspector } from './components/DataInspector';
+import { PdfScheduleWorkflow } from './components/PdfScheduleWorkflow';
 
 const MainLayout: React.FC = () => {
   const { currentView, toastMessage, hideToast } = useGridCharge();
@@ -52,6 +53,8 @@ const MainLayout: React.FC = () => {
         return <AddChargerModal />;
       case 'playground':
         return <SAPPlayground />;
+      case 'pdf-schedule-import':
+        return <PdfScheduleWorkflow />;
       default:
         return <Dashboard />;
     }

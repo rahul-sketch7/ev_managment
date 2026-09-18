@@ -8,6 +8,11 @@ export const Dashboard: React.FC = () => {
     chargers,
     gridConfig,
     optimizationResult,
+    baselineResult,
+    optimizationStatus,
+    optimizationError,
+    sourceDocument,
+    approvedSchedule,
     isOptimizing,
     alerts,
     runOptimization,
@@ -35,6 +40,20 @@ export const Dashboard: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [priorityFilter, setPriorityFilter] = useState('All');
   const [hoveredHour, setHoveredHour] = useState<number | null>(null);
+
+  if (!optimizationResult) {
+    return (
+      <div className="space-y-4">
+        <div className="bg-white border border-[#c4c6d0]/50 rounded-xl p-6 shadow-xs">
+          <h1 className="text-[20px] font-bold text-[#00163d]">Depot Charging & Peak-Demand Optimization Command Center</h1>
+          <p className="text-[13px] text-[#44464f] mt-2">Optimization status: <strong>{optimizationStatus}</strong>.</p>
+          <p className="text-[12px] text-[#747780] mt-1">{approvedSchedule ? `${approvedSchedule.length} vehicles imported · Last imported: ${sourceDocument?.name}` : 'No schedule imported. Import and approve a PDF schedule before optimization.'}</p>
+          {optimizationError && <p className="text-[12px] text-[#ba1a1a] mt-3">{optimizationError}</p>}
+          <div className="mt-4 flex gap-2"><button onClick={() => setCurrentView('pdf-schedule-import')} className="px-4 py-2 bg-white border border-[#00163d] text-[#00163d] text-[12px] font-semibold rounded-lg">Import Vehicle Schedule</button><button onClick={() => runOptimization(true)} disabled={isOptimizing} className="px-4 py-2 bg-[#00163d] text-white text-[12px] font-semibold rounded-lg disabled:opacity-50">{isOptimizing ? 'Solving...' : 'Run Smart Optimization'}</button></div>
+        </div>
+      </div>
+    );
+  }
 
   // Filter vehicles
   const filteredVehicles = vehicles.filter((v) => {
@@ -92,25 +111,7 @@ export const Dashboard: React.FC = () => {
   };
 
   // Compute 24h demand curve points
-  const curvePoints = optimizationResult.hourlyDemandCurve || [
-    { hour: 0, timeLabel: '00:00', uncontrolledKw: 110, optimizedKw: 180, capacityLimitKw: 600, warningLimitKw: 510, isPeakTariff: false, tariffRate: 5.2 },
-    { hour: 2, timeLabel: '02:00', uncontrolledKw: 100, optimizedKw: 190, capacityLimitKw: 600, warningLimitKw: 510, isPeakTariff: false, tariffRate: 5.2 },
-    { hour: 4, timeLabel: '04:00', uncontrolledKw: 95, optimizedKw: 170, capacityLimitKw: 600, warningLimitKw: 510, isPeakTariff: false, tariffRate: 5.2 },
-    { hour: 6, timeLabel: '06:00', uncontrolledKw: 140, optimizedKw: 140, capacityLimitKw: 600, warningLimitKw: 510, isPeakTariff: false, tariffRate: 7.2 },
-    { hour: 8, timeLabel: '08:00', uncontrolledKw: 160, optimizedKw: 160, capacityLimitKw: 600, warningLimitKw: 510, isPeakTariff: false, tariffRate: 7.2 },
-    { hour: 10, timeLabel: '10:00', uncontrolledKw: 175, optimizedKw: 175, capacityLimitKw: 600, warningLimitKw: 510, isPeakTariff: false, tariffRate: 7.2 },
-    { hour: 12, timeLabel: '12:00', uncontrolledKw: 190, optimizedKw: 190, capacityLimitKw: 600, warningLimitKw: 510, isPeakTariff: false, tariffRate: 7.2 },
-    { hour: 14, timeLabel: '14:00', uncontrolledKw: 220, optimizedKw: 210, capacityLimitKw: 600, warningLimitKw: 510, isPeakTariff: false, tariffRate: 7.2 },
-    { hour: 16, timeLabel: '16:00', uncontrolledKw: 410, optimizedKw: 310, capacityLimitKw: 600, warningLimitKw: 510, isPeakTariff: false, tariffRate: 7.2 },
-    { hour: 17, timeLabel: '17:00', uncontrolledKw: 522, optimizedKw: 428, capacityLimitKw: 600, warningLimitKw: 510, isPeakTariff: true, tariffRate: 10.5 },
-    { hour: 18, timeLabel: '18:00', uncontrolledKw: 490, optimizedKw: 380, capacityLimitKw: 600, warningLimitKw: 510, isPeakTariff: true, tariffRate: 10.5 },
-    { hour: 19, timeLabel: '19:00', uncontrolledKw: 380, optimizedKw: 320, capacityLimitKw: 600, warningLimitKw: 510, isPeakTariff: true, tariffRate: 10.5 },
-    { hour: 20, timeLabel: '20:00', uncontrolledKw: 240, optimizedKw: 260, capacityLimitKw: 600, warningLimitKw: 510, isPeakTariff: true, tariffRate: 10.5 },
-    { hour: 21, timeLabel: '21:00', uncontrolledKw: 160, optimizedKw: 360, capacityLimitKw: 600, warningLimitKw: 510, isPeakTariff: false, tariffRate: 7.2 },
-    { hour: 22, timeLabel: '22:00', uncontrolledKw: 120, optimizedKw: 390, capacityLimitKw: 600, warningLimitKw: 510, isPeakTariff: false, tariffRate: 5.2 },
-    { hour: 24, timeLabel: '24:00', uncontrolledKw: 105, optimizedKw: 240, capacityLimitKw: 600, warningLimitKw: 510, isPeakTariff: false, tariffRate: 5.2 },
-  ];
-
+  const curvePoints = optimizationResult.hourlyDemandCurve || baselineResult?.hourlyDemandCurve || [];
   // SVG Chart Dimensions
   const chartWidth = 900;
   const chartHeight = 220;
@@ -299,7 +300,7 @@ export const Dashboard: React.FC = () => {
                 3. Expenditures & Value Realized
               </div>
               <div className="text-[12px] text-[#005137] mt-0.5">
-                <strong>₹{optimizationResult.energyCost.toLocaleString()} Expended</strong> • Saved ₹{optimizationResult.costSavings.toLocaleString()} • Shaved 94 kW
+                <strong>{optimizationResult.energyCost === null ? 'Cost not provided' : `₹${optimizationResult.energyCost.toLocaleString()} Expended`}</strong> • {optimizationResult.costSavings === null ? 'Savings not provided' : `Saved ₹${optimizationResult.costSavings.toLocaleString()}`} • Shaved {optimizationResult.peakReductionKw} kW
               </div>
             </div>
           </div>
@@ -610,7 +611,7 @@ export const Dashboard: React.FC = () => {
                     </div>
                   </div>
                   <span className="px-2.5 py-1 rounded bg-[#85f8c4]/30 text-[#005137] font-mono text-[11px] font-bold">
-                    Saved ₹{optimizationResult.costSavings.toLocaleString()}
+                    {optimizationResult.costSavings === null ? 'Savings not provided' : `Saved ₹${optimizationResult.costSavings.toLocaleString()}`}
                   </span>
                 </div>
 
@@ -624,15 +625,14 @@ export const Dashboard: React.FC = () => {
                     </div>
                     <div className="flex items-baseline gap-2 mt-2">
                       <span className="text-[22px] font-mono font-bold text-[#00163d]">
-                        ₹{optimizationResult.energyCost.toLocaleString()}
+                        {optimizationResult.energyCost === null ? 'Not provided' : `₹${optimizationResult.energyCost.toLocaleString()}`}
                       </span>
                       <span className="text-[13px] font-mono text-[#747780] line-through">
-                        ₹{optimizationResult.uncontrolledCost.toLocaleString()}
+                        {optimizationResult.uncontrolledCost === null ? 'Not provided' : `₹${optimizationResult.uncontrolledCost.toLocaleString()}`}
                       </span>
                     </div>
                     <div className="text-[11px] text-[#005137] font-semibold mt-1">
-                      <div>• Net Savings: <strong>₹{optimizationResult.costSavings.toLocaleString()} ({optimizationResult.costSavingsPercent}%)</strong></div>
-                      <div>• Peak Tariff Avoided: <strong>₹1,210 saved</strong></div>
+                      <div>• Net Savings: <strong>{optimizationResult.costSavings === null ? 'Not provided' : `₹${optimizationResult.costSavings.toLocaleString()} (${optimizationResult.costSavingsPercent}%)`}</strong></div>
                     </div>
                   </div>
 
@@ -679,12 +679,10 @@ export const Dashboard: React.FC = () => {
                       <span className="material-symbols-outlined text-[16px] text-[#006c4a]">verified</span>
                     </div>
                     <div className="mt-2 text-[18px] font-mono font-bold text-[#006c4a]">
-                      100% Guaranteed
+                      {optimizationResult.vehiclesReady}/{optimizationResult.totalVehicles} Ready
                     </div>
                     <div className="text-[11px] text-[#44464f] mt-1 space-y-0.5">
                       <div>• Ready on time: <strong>{optimizationResult.vehiclesReady}/{optimizationResult.totalVehicles} EVs</strong></div>
-                      <div>• Critical Route Delays: <strong className="text-[#006c4a]">0 (Zero SLA Violations)</strong></div>
-                      <div>• Pre-Departure Buffer: <strong>≥ 28 min average slack</strong></div>
                     </div>
                   </div>
                 </div>

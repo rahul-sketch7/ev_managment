@@ -8,11 +8,17 @@ export const DataInspector: React.FC = () => {
     chargers,
     gridConfig,
     optimizationResult,
+    optimizationStatus,
+    optimizationError,
     runOptimization,
     setCustomFleet,
     isOptimizing,
     showToast,
   } = useGridCharge();
+
+  if (!optimizationResult) {
+    return <div className="bg-white border border-[#c4c6d0]/50 rounded-xl p-5 shadow-xs"><h2 className="text-[18px] font-bold text-[#00163d]">Data & JSON Inspector</h2><p className="text-[13px] text-[#44464f] mt-2">Optimization status: <strong>{optimizationStatus}</strong>. No output is available until a successful optimizer response is received.</p>{optimizationError && <p className="text-[12px] text-[#ba1a1a] mt-2">{optimizationError}</p>}<button onClick={() => runOptimization()} disabled={isOptimizing} className="mt-4 px-4 py-2 bg-[#00163d] text-white text-[12px] font-semibold rounded-lg">{isOptimizing ? 'Optimizing...' : 'Run Optimization'}</button></div>;
+  }
 
   const [activeTab, setActiveTab] = useState<'side-by-side' | 'input-table' | 'output-schedule'>('side-by-side');
   const [jsonInputText, setJsonInputText] = useState<string>('');
@@ -248,12 +254,12 @@ export const DataInspector: React.FC = () => {
                 <span className="w-2.5 h-2.5 rounded-full bg-[#006c4a]"></span>
                 <span className="text-[13px] font-bold text-[#00163d]">OPTIMIZATION RESULT PRODUCED</span>
                 <span className="px-2 py-0.5 rounded bg-[#85f8c4]/30 text-[#005137] text-[11px] font-semibold">
-                  Solved in {optimizationResult.solvedInSeconds}s
+                  Solved in {optimizationResult.solvedInSeconds === null ? 'Not provided' : `${optimizationResult.solvedInSeconds}s`}
                 </span>
               </div>
               <div className="flex items-center gap-1 text-[11px] font-mono text-[#006c4a] font-semibold">
                 <span>Peak: {optimizationResult.optimizedPeakDemand} kW</span>
-                <span>(Saved ₹{optimizationResult.costSavings.toLocaleString()})</span>
+                <span>({optimizationResult.costSavings === null ? 'Savings not provided' : `Saved ₹${optimizationResult.costSavings.toLocaleString()}`})</span>
               </div>
             </div>
 

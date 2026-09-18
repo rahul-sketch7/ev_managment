@@ -1,11 +1,48 @@
 import React, { useState } from 'react';
 import { useGridCharge } from '../context/GridChargeContext';
+import { downloadTextFile, printReport, toCsv } from '../services/exportService';
 
 type DateRange = 'today' | '7d' | '30d' | 'custom';
 
 export const Analytics: React.FC = () => {
-  const { historicalDays, showToast } = useGridCharge();
+  const { historicalDays, baselineResult, optimizationResult, vehicles, gridConfig, showToast } = useGridCharge();
   const [dateRange, setDateRange] = useState<DateRange>('30d');
+  const currentCurve = optimizationResult?.hourlyDemandCurve || baselineResult?.hourlyDemandCurve || [];
+  const currentChartDays = currentCurve.length
+    ? Array.from({ length: Math.ceil(currentCurve.length / 4) }, (_, index) => {
+      const points = currentCurve.slice(index * 4, index * 4 + 4);
+      const energyKwh = points.reduce((sum, point) => sum + point.optimizedKw * 0.25, 0);
+      const peakDemandKw = Math.max(...points.map((point) => point.optimizedKw));
+      const baselinePeakKw = Math.max(...points.map((point) => point.uncontrolledKw));
+      return {
+        date: `Block ${index + 1}`,
+        dayName: `${points[0]?.timeLabel || ''}-${points[points.length - 1]?.timeLabel || ''}`,
+        energyMwh: energyKwh / 1000,
+        energyCost: null,
+        peakDemandKw,
+        vehiclesReady: null,
+        totalVehicles: vehicles.length,
+        peakShavedKw: Math.max(0, baselinePeakKw - peakDemandKw),
+      };
+    })
+    : [];
+  const scenarioChartDays = vehicles.length
+    ? Array.from({ length: Math.min(7, Math.max(1, vehicles.length)) }, (_, index) => {
+      const group = vehicles.filter((_, vehicleIndex) => vehicleIndex % Math.min(7, Math.max(1, vehicles.length)) === index);
+      return {
+        date: `Scenario ${index + 1}`,
+        dayName: `Group ${index + 1}`,
+        energyMwh: group.reduce((sum, vehicle) => sum + vehicle.requiredEnergy, 0) / 1000,
+        energyCost: null,
+        peakDemandKw: group.reduce((sum, vehicle) => sum + vehicle.maxChargingPower, 0),
+        vehiclesReady: null,
+        totalVehicles: group.length,
+        peakShavedKw: 0,
+      };
+    })
+    : [];
+  const chartDays = historicalDays.length ? historicalDays : currentChartDays.length ? currentChartDays : scenarioChartDays;
+  const chartDataSource = historicalDays.length ? 'historical' : currentCurve.length ? 'baseline/optimized' : 'current scenario';
 
   // KPI calculations
   const totalEnergyKwh = 48240;
@@ -79,7 +116,21 @@ export const Analytics: React.FC = () => {
           </div>
 
           <button
-            onClick={() => showToast('Audited charging dataset exported as CSV.')}
+            onClick={() => {
+              const rows = historicalDays.length
+                ? historicalDays.map((day) => ({ date: day.date, source: 'HISTORICAL', peakDemandKw: day.peakDemandKw, energyMwh: day.energyMwh, energyCost: day.energyCost, vehiclesReady: day.vehiclesReady, totalVehicles: day.totalVehicles }))
+                : [{
+                  date: new Date().toISOString(),
+                  source: optimizationResult ? 'OPTIMIZED' : baselineResult ? 'BASELINE' : 'CURRENT SCENARIO',
+                  peakDemandKw: optimizationResult?.optimizedPeakDemand ?? baselineResult?.peakDemand ?? null,
+                  energyMwh: optimizationResult ? optimizationResult.vehicleSchedules.reduce((sum, item) => sum + item.energyKwh, 0) / 1000 : baselineResult ? baselineResult.energyConsumption / 1000 : null,
+                  energyCost: optimizationResult?.energyCost ?? baselineResult?.electricityCost ?? null,
+                  vehiclesReady: optimizationResult?.vehiclesReady ?? baselineResult?.vehiclesReady ?? null,
+                  totalVehicles: optimizationResult?.totalVehicles ?? baselineResult?.totalVehicles ?? vehicles.length,
+                }];
+              downloadTextFile('gridcharge-analytics.csv', toCsv(rows, ['date', 'source', 'peakDemandKw', 'energyMwh', 'energyCost', 'vehiclesReady', 'totalVehicles']), 'text/csv;charset=utf-8');
+              showToast('Audited charging dataset exported as CSV.');
+            }}
             className="inline-flex items-center gap-1.5 px-3 h-8.5 rounded-md bg-white text-[#00163d] text-[12px] font-medium hover:bg-[#eff4ff] shadow-2xs transition-colors border border-[#c4c6d0] cursor-pointer"
             type="button"
           >
@@ -87,7 +138,7 @@ export const Analytics: React.FC = () => {
             <span>Download CSV Data</span>
           </button>
           <button
-            onClick={() => showToast('Depot Executive Analytics Report compiled to PDF.')}
+            onClick={() => { printReport('GridCharge Analytics Report', document.querySelector('main')?.innerText); showToast('Analytics report downloaded. Open the HTML file and print it to PDF if needed.'); }}
             className="inline-flex items-center gap-1.5 px-3.5 h-8.5 rounded-md bg-[#00163d] text-white text-[12px] font-semibold hover:bg-[#0f2b5c] transition-colors shadow-xs cursor-pointer"
             type="button"
           >
@@ -207,7 +258,9 @@ export const Analytics: React.FC = () => {
                   Daily Energy Consumption (kWh) & Peak Shaving
                 </h2>
                 <p className="text-[12px] text-[#44464f]">
-                  Logged 7-day charging volume compared against peak demand shaved.
+                  {chartDataSource === 'current scenario'
+                    ? 'Required energy and charging power grouped from the current vehicle scenario.'
+                    : 'Charging volume compared against peak demand.'}
                 </p>
               </div>
               <div className="flex items-center gap-3 text-[11px] font-mono">
@@ -224,9 +277,10 @@ export const Analytics: React.FC = () => {
 
             {/* Bar Chart Representation */}
             <div className="grid grid-cols-7 gap-2 h-44 items-end pt-4 pb-2 px-2 bg-[#eff4ff] rounded-lg">
-              {historicalDays.slice(0, 7).map((d) => {
+              {chartDays.slice(0, 7).map((d) => {
                 const kwh = Math.round(d.energyMwh * 1000);
-                const barHeight = Math.min(100, Math.round((kwh / 2500) * 100));
+                const maxKwh = Math.max(...chartDays.map((item) => item.energyMwh * 1000), 1);
+                const barHeight = Math.max(4, Math.round((kwh / maxKwh) * 100));
                 return (
                   <div key={d.date} className="flex flex-col items-center h-full justify-end gap-1 group">
                     <span className="text-[9px] font-mono text-[#00163d] font-bold opacity-0 group-hover:opacity-100 transition-opacity">
@@ -236,7 +290,8 @@ export const Analytics: React.FC = () => {
                     <span className="text-[10px] font-mono text-[#44464f] mt-1">{d.dayName}</span>
                   </div>
                 );
-              })}
+              ))}
+              {!chartDays.length && <div className="col-span-7 flex items-center justify-center text-[12px] text-[#747780]">No vehicle or scenario data available.</div>}
             </div>
           </div>
 
@@ -264,26 +319,27 @@ export const Analytics: React.FC = () => {
 
               {/* Day-by-day Peak comparison */}
               <div className="flex flex-col gap-2">
-                {historicalDays.slice(0, 5).map((d) => (
+                {chartDays.slice(0, 5).map((d) => (
                   <div key={d.date} className="flex items-center gap-3 text-[11px]">
                     <span className="w-16 font-mono text-[#44464f]">{d.dayName}</span>
                     <div className="relative flex-1 h-5 rounded bg-white overflow-hidden border border-slate-200">
                       <div
                         className="h-full bg-[#00163d] flex items-center justify-end pr-2 text-white font-mono text-[9px] font-bold"
-                        style={{ width: `${(d.peakDemandKw / 600) * 100}%` }}
+                        style={{ width: `${Math.min(100, (d.peakDemandKw / Math.max(gridConfig.siteCapacity, 1)) * 100)}%` }}
                       >
                         {d.peakDemandKw} kW
                       </div>
                       <div
                         className="absolute top-0 bottom-0 w-0.5 bg-amber-600 z-10"
-                        style={{ left: `${(500 / 600) * 100}%` }}
+                        style={{ left: `${Math.min(100, (gridConfig.siteCapacity / Math.max(gridConfig.siteCapacity, 1)) * 100)}%` }}
                       ></div>
                     </div>
                     <span className="w-20 text-right font-mono text-[#006c4a] font-bold">
-                      {500 - d.peakDemandKw} kW Buffer
+                      {Math.max(0, gridConfig.siteCapacity - d.peakDemandKw)} kW Buffer
                     </span>
                   </div>
                 ))}
+                {!chartDays.length && <div className="text-[12px] text-[#747780]">No vehicle or scenario data available.</div>}
               </div>
             </div>
           </div>

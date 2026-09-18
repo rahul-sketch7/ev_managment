@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useGridCharge } from '../context/GridChargeContext';
 import { Charger } from '../types';
+import { downloadTextFile } from '../services/exportService';
 
 export const ChargingInfrastructure: React.FC = () => {
   const {
@@ -9,6 +10,7 @@ export const ChargingInfrastructure: React.FC = () => {
     setSelectedChargerId,
     setCurrentView,
     showToast,
+    optimizationResult,
   } = useGridCharge();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -105,7 +107,7 @@ export const ChargingInfrastructure: React.FC = () => {
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <button
-            onClick={() => showToast('Depot electrical topology exported as JSON schema.')}
+            onClick={() => { downloadTextFile('gridcharge-topology.json', JSON.stringify({ chargers }, null, 2), 'application/json'); showToast('Depot electrical topology exported.'); }}
             className="inline-flex items-center gap-1.5 px-3 h-8.5 rounded-md bg-white text-[#00163d] text-[12px] font-medium hover:bg-[#eff4ff] shadow-2xs transition-colors border border-[#c4c6d0] cursor-pointer"
             type="button"
           >
@@ -164,7 +166,7 @@ export const ChargingInfrastructure: React.FC = () => {
           <div className="flex items-baseline gap-2 mt-2">
             <span className="text-[26px] font-mono font-bold text-[#00163d]">8</span>
             <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-900 font-bold">
-              428 kW Draw
+              {optimizationResult ? `${optimizationResult.optimizedPeakDemand} kW Draw` : 'Optimization not run'}
             </span>
           </div>
           <div className="text-[11px] text-[#44464f] mt-1 truncate">Actively dispensing power</div>
@@ -225,7 +227,7 @@ export const ChargingInfrastructure: React.FC = () => {
 
           <div className="p-3 rounded-lg bg-[#eff4ff] border border-blue-100">
             <div className="text-[10px] uppercase font-bold text-[#44464f]">Real-time Site Load</div>
-            <div className="font-mono text-[22px] font-bold text-[#00163d] mt-0.5">428 kW</div>
+            <div className="font-mono text-[22px] font-bold text-[#00163d] mt-0.5">{optimizationResult ? `${optimizationResult.optimizedPeakDemand} kW` : 'Not provided'}</div>
             <div className="text-[11px] font-bold text-[#0f2b5c] mt-0.5">71.3% Transformer Loading</div>
           </div>
 
